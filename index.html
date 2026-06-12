@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoL Draft Assistant</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">
+    <span class="logo">⚔</span>
+    <div>
+      <h1>Draft Assistant</h1>
+      <div class="patch" id="patch-label">Patch —</div>
+    </div>
+  </div>
+  <div class="side-select">
+    <span class="side-label">My team:</span>
+    <button id="side-blue" class="side-btn blue active">BLUE</button>
+    <button id="side-red" class="side-btn red">RED</button>
+  </div>
+  <div class="opt-group" title="2026 First Selection: pick order can be decoupled from side">
+    <span class="side-label">First pick:</span>
+    <button id="fp-blue" class="opt-btn active">BLUE</button>
+    <button id="fp-red" class="opt-btn">RED</button>
+  </div>
+  <div class="topbar-actions">
+    <button id="fearless-btn" class="ghost-btn warn" title="Mark champions used earlier in the series (fearless draft)">☠ Fearless</button>
+    <button id="undo-btn" class="ghost-btn" title="Undo last action">↩ Undo</button>
+    <button id="reset-btn" class="ghost-btn" title="Reset draft">⟲ Reset</button>
+  </div>
+</header>
+
+<div id="fearless-bar">
+  <span class="hint">Fearless mode: click champions in the grid to mark them as used in previous games of the series (unavailable to both teams). Click a chip to remove.</span>
+  <span id="fearless-chips"></span>
+</div>
+
+<div id="draft-track"></div>
+
+<main id="layout">
+  <!-- Blue team column -->
+  <section class="team-col blue" id="blue-col">
+    <h2 class="team-title blue">BLUE SIDE <span class="you-tag" id="blue-you">YOU</span></h2>
+    <div class="bans" id="blue-bans"></div>
+    <div class="picks" id="blue-picks"></div>
+    <div class="comp-analysis" id="blue-comp"></div>
+  </section>
+
+  <!-- Center: champion select + recommendations -->
+  <section id="center-col">
+    <div id="step-banner"></div>
+    <div id="recs-panel">
+      <div class="recs-header">
+        <h3 id="recs-title">Recommendations</h3>
+        <select id="rec-role-filter">
+          <option value="all">All roles</option>
+          <option value="top">Top</option>
+          <option value="jungle">Jungle</option>
+          <option value="mid">Mid</option>
+          <option value="adc">ADC</option>
+          <option value="support">Support</option>
+        </select>
+      </div>
+      <div id="recs-list"></div>
+    </div>
+    <div id="pool-panel">
+      <div class="pool-controls">
+        <input type="search" id="champ-search" placeholder="Search champion…" autocomplete="off">
+        <div class="role-filters" id="role-filters">
+          <button data-role="all" class="active">All</button>
+          <button data-role="top">Top</button>
+          <button data-role="jungle">Jng</button>
+          <button data-role="mid">Mid</button>
+          <button data-role="adc">ADC</button>
+          <button data-role="support">Sup</button>
+        </div>
+      </div>
+      <div id="champ-grid"></div>
+    </div>
+  </section>
+
+  <!-- Red team column -->
+  <section class="team-col red" id="red-col">
+    <h2 class="team-title red">RED SIDE <span class="you-tag" id="red-you">YOU</span></h2>
+    <div class="bans" id="red-bans"></div>
+    <div class="picks" id="red-picks"></div>
+    <div class="comp-analysis" id="red-comp"></div>
+  </section>
+</main>
+
+<footer id="foot">
+  Data: current-patch solo queue (Emerald+) + pro play pick/ban. Pro-style weighting. Not affiliated with Riot Games.
+</footer>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
