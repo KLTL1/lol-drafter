@@ -340,6 +340,7 @@ function render() {
   renderRecs();
   renderGrid();
   renderFearless();
+  renderGamePlan();
   $("patch-label").textContent = `Patch ${PATCH} · solo queue + pro data · ${DATA_UPDATED}`;
   $("blue-you").classList.toggle("visible", state.mySide === "blue");
   $("red-you").classList.toggle("visible", state.mySide === "red");
@@ -528,6 +529,100 @@ function renderFearless() {
   chips.querySelectorAll(".fearless-chip").forEach(ch => {
     ch.onclick = () => { pushUndo(); state.fearless.delete(ch.dataset.k); render(); };
   });
+}
+
+/* ================= Game plan ================= */
+function teamProfile(side) {
+  const picks = teamPicks(side);
+  const champs = picks.map(p => ({ key: p.key, role: p.role, c: CHAMPIONS[p.key] }));
+  const s = compStats(picks);
+  const names = f => champs.filter(f).map(x => dispName(x.key));
+  const engageMax = champs.length ? Math.max(...champs.map(x => x.c.a.engage)) : 0;
+  // primary carry = best late-game non-frontline damage threat
+  const carries = champs.filter(x => x.c.a.late >= 3 && x.c.a.front <= 1)
+    .sort((a, b) => (b.c.a.late - a.c.a.late) || ((b.c.pro.p || 0) - (a.c.pro.p || 0)));
+  return {
+    n: champs.length, s, engageMax,
+    engagers: names(x => x.c.a.engage >= 2),
+    pokers: names(x => x.c.a.poke >= 2),
+    splitters: names(x => x.c.a.split >= 3),
+    peelers: names(x => x.c.a.peel >= 2),
+    earlies: names(x => x.c.a.early >= 3),
+    lates: names(x => x.c.a.late >= 3),
+    catchers: names(x => x.c.a.engage >= 2 && x.c.a.early >= 3),
+    carry: carries.length ? dispName(carries[0].key) : null,
+  };
+}
+
+function archetype(p) {
+  if (p.n === 0) return null;
+  const s = p.s;
+  const scores = {
+    teamfight: s.cc * 0.5 + p.engageMax * 1.6 + s.front * 0.45,
+    poke: s.poke * 1.3,
+    protect: (p.carry && p.peelers.length ? 3.5 : 0) + s.peel * 0.9,
+    split: s.split * 0.9 + (p.splitters.length ? 2 : 0),
+    early: Math.max(0, s.early - s.late) * 2.2,
+    scale: Math.max(0, s.late - s.early) * 2.2,
+  };
+  return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+const joinNames = arr => arr.slice(0, 3).join(", ");
+
+function winConditionText(p) {
+  switch (archetype(p)) {
+    case "teamfight": return `Group and force 5v5 teamfights around objectives — ${joinNames(p.engagers) || "the frontline"} ${p.engagers.length > 1 ? "start" : "starts"} the fight${p.carry ? `, ${p.carry} cleans up` : ""}.`;
+    case "poke": return `Siege and whittle the enemy down with ${joinNames(p.pokers)} before objectives spawn — take free damage and never let them start the fight.`;
+    case "protect": return `Get ${p.carry} to 3+ items and win extended fights — ${joinNames(p.peelers) || "the supports"} peel everything off ${p.carry}.`;
+    case "split": return `Win through side-lane pressure: ${joinNames(p.splitters)} splits while the rest play 4v4 — trade towers, don't group 5 mid.`;
+    case "early": return `Snowball before ~20 min: ${joinNames(p.earlies)} hit their power spike first — force skirmishes, dives and early objectives, and close fast.`;
+    case "scale": return `Out-scale: play clean early, farm safely, and take over after 25+ min when ${joinNames(p.lates)} come online.`;
+    default: return "Balanced comp — win through whichever lanes get ahead.";
+  }
+}
+
+function gamePlanBullets(my, en) {
+  const b = [];
+  const myLean = my.s.late - my.s.early, enLean = en.s.late - en.s.early;
+  if (myLean - enLean >= 2) b.push("You out-scale them. Respect their early aggression, don't take coin-flip fights before 20 min, and trade objectives for safe farm — time is on your side.");
+  else if (enLean - myLean >= 2) b.push("Your advantage has a timer — they out-scale you. Force early skirmishes and dives, take objectives on spawn, and aim to end before ~30 min.");
+  else b.push("Tempo is even — this game is decided by lane matchups and objective setups, not by stalling or rushing.");
+
+  if (en.s.poke >= 5 && my.engageMax >= 2) b.push(`They want to poke you out before fights start. Don't dance at max range — force the engage with ${joinNames(my.engagers)}, or fight from fog and chokes where poke can't stack.`);
+  if (my.s.poke >= 5 && en.engageMax >= 3) b.push(`Poke before objectives, but track engage cooldowns on ${joinNames(en.engagers)} — keep spacing and disengage their flanks.`);
+
+  if (en.splitters.length) b.push(`${joinNames(en.splitters)} will splitpush. Don't send three people — answer with one matching side-laner, or trade objectives 4v4 on the other side of the map.`);
+  if (my.splitters.length && my.s.split >= 5) b.push(`Use ${joinNames(my.splitters)}'s side pressure: set up 1-3-1 once laning ends, and only group when they fully collapse to stop it.`);
+
+  if (en.n >= 4 && en.s.ap < 0.6) b.push("Their damage is almost all AD — stack armor on your frontline (Randuin's, Frozen Heart); their threat falls off hard against it.");
+  if (en.n >= 4 && en.s.ad < 0.6) b.push("Their damage is almost all AP — rush MR on your frontline (Spirit Visage, Force of Nature, Mercs) and they run out of ways to kill you.");
+  if (my.n >= 4 && my.s.ap < 0.6) b.push("Your damage is all AD — they will stack armor. Close the game before their defensive items come online.");
+  if (my.n >= 4 && my.s.ad < 0.6) b.push("Your damage is all AP — expect MR stacking; prioritize Void Staff timing or end early.");
+
+  if (en.catchers.length) b.push(`Don't get caught: ${joinNames(en.catchers)} can turn one pick into a lost game. Buy control wards, move in pairs after 20 min, never facecheck.`);
+  if (en.carry && my.engageMax >= 2) b.push(`Their plan runs through ${en.carry} — assign your engage/dive onto them first in every fight.`);
+
+  return b.slice(0, 6);
+}
+
+function renderGamePlan() {
+  const el = $("gameplan");
+  const enemySide = state.mySide === "blue" ? "red" : "blue";
+  const my = teamProfile(state.mySide), en = teamProfile(enemySide);
+  if (my.n < 2 || en.n < 2) {
+    el.innerHTML = `<div class="gp-empty">Win conditions and the matchup game plan appear once both teams have at least 2 picks.</div>`;
+    return;
+  }
+  const partial = (my.n < 5 || en.n < 5) ? `<div class="gp-note">Draft in progress — the plan sharpens as more picks lock in.</div>` : "";
+  const enColor = enemySide === "blue" ? "var(--blue-team)" : "var(--red-team)";
+  el.innerHTML = partial + `
+    <div class="gp-cols">
+      <div class="gp-win" style="border-left:3px solid var(--gold)"><div class="gp-lbl">Your win condition</div>${winConditionText(my)}</div>
+      <div class="gp-win" style="border-left:3px solid ${enColor}"><div class="gp-lbl">Enemy win condition</div>${winConditionText(en)}</div>
+    </div>
+    <div class="gp-lbl">How to play it</div>
+    <ul class="gp-list">${gamePlanBullets(my, en).map(t => `<li>${t}</li>`).join("")}</ul>`;
 }
 
 /* ================= Actions ================= */
