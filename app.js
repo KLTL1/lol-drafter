@@ -201,29 +201,30 @@ function scorePick(key, role, mySide, opts) {
     }
   });
 
-  // Team comp needs (only meaningful once we have 2+ picks)
+  // Team comp needs — weighted up so a cohesive comp is favored over a raw-meta pick
   const comp = compStats(allies);
   if (comp.n >= 2) {
-    if (comp.ap === 0 && c.dmg === "ap") { score += 1.8; reasons.push(["+", "adds AP damage"]); }
-    if (comp.ad === 0 && c.dmg === "ad") { score += 1.8; reasons.push(["+", "adds AD damage"]); }
-    if (c.dmg === "mix" && (comp.ap < 1 || comp.ad < 1)) { score += 0.8; reasons.push(["+", "mixed damage"]); }
-    if (comp.front < 3 && c.a.front >= 2) { score += 1.5; reasons.push(["+", "adds frontline"]); }
-    if (comp.cc < 4 && c.a.cc >= 2) { score += 1.0; reasons.push(["+", "adds CC"]); }
-    if (comp.engage < 2 && c.a.engage >= 2) { score += 1.2; reasons.push(["+", "adds engage"]); }
-    if (comp.late >= 5 && comp.peel < 3 && c.a.peel >= 2) { score += 1.0; reasons.push(["+", "peel for carries"]); }
+    if (comp.ap === 0 && c.dmg === "ap") { score += 2.4; reasons.push(["+", "adds AP damage"]); }
+    if (comp.ad === 0 && c.dmg === "ad") { score += 2.4; reasons.push(["+", "adds AD damage"]); }
+    if (c.dmg === "mix" && (comp.ap < 1 || comp.ad < 1)) { score += 1.1; reasons.push(["+", "mixed damage"]); }
+    if (comp.front < 3 && c.a.front >= 2) { score += 2.0; reasons.push(["+", "adds frontline"]); }
+    if (comp.cc < 4 && c.a.cc >= 2) { score += 1.4; reasons.push(["+", "adds CC"]); }
+    if (comp.engage < 2 && c.a.engage >= 2) { score += 1.7; reasons.push(["+", "adds engage"]); }
+    if (comp.late >= 5 && comp.peel < 3 && c.a.peel >= 2) { score += 1.4; reasons.push(["+", "peel for carries"]); }
     // win-condition coherence
     const lean = comp.early - comp.late;
-    if (lean >= 2 && c.a.early >= 2) { score += 0.6; reasons.push(["+", "fits early-game plan"]); }
-    if (lean <= -2 && c.a.late >= 2) { score += 0.6; reasons.push(["+", "fits scaling plan"]); }
+    if (lean >= 2 && c.a.early >= 2) { score += 0.9; reasons.push(["+", "fits early-game plan"]); }
+    if (lean <= -2 && c.a.late >= 2) { score += 0.9; reasons.push(["+", "fits scaling plan"]); }
   }
 
-  // Enemy comp counters
+  // Enemy comp counters — also weighted up (draft to beat their comp)
   const ecomp = compStats(enemies);
   if (ecomp.n >= 3) {
-    if (ecomp.ap < 0.6 && c.a.front >= 2) { score += 0.6; reasons.push(["+", "enemy is full AD"]); }
-    if (ecomp.ad < 0.6 && c.a.front >= 2) { score += 0.4; reasons.push(["+", "enemy is full AP"]); }
-    if (ecomp.poke >= 5 && c.a.engage >= 2) { score += 0.8; reasons.push(["+", "engage vs poke comp"]); }
-    if (ecomp.engage >= 3 && c.a.peel >= 2) { score += 0.6; reasons.push(["+", "disengage vs dive"]); }
+    if (ecomp.ap < 0.6 && c.a.front >= 2) { score += 1.0; reasons.push(["+", "tanky vs their full-AD"]); }
+    if (ecomp.ad < 0.6 && c.a.front >= 2) { score += 0.7; reasons.push(["+", "tanky vs their full-AP"]); }
+    if (ecomp.poke >= 5 && c.a.engage >= 2) { score += 1.2; reasons.push(["+", "engage vs poke comp"]); }
+    if (ecomp.engage >= 3 && c.a.peel >= 2) { score += 1.0; reasons.push(["+", "disengage vs their dive"]); }
+    if (ecomp.split >= 3 && (c.a.split >= 2 || c.a.wave >= 2)) { score += 0.6; reasons.push(["+", "answers their split"]); }
   }
 
   return { score, reasons };
@@ -543,20 +544,22 @@ function teamProfile(picks) {
   return {
     n: champs.length, s, engageMax,
     engagers: names(x => x.c.a.engage >= 2),
+    divers: names(x => x.c.a.engage >= 2 && x.c.a.front <= 1),     // mobile/flank engage
+    frontliners: names(x => x.c.a.front >= 2),
     pokers: names(x => x.c.a.poke >= 2),
     splitters: names(x => x.c.a.split >= 3),
     peelers: names(x => x.c.a.peel >= 2),
     earlies: names(x => x.c.a.early >= 3),
     lates: names(x => x.c.a.late >= 3),
     catchers: names(x => x.c.a.engage >= 2 && x.c.a.early >= 3),
+    carries: carries.map(x => dispName(x.key)),
     carry: carries.length ? dispName(carries[0].key) : null,
   };
 }
 
-function archetype(p) {
-  if (p.n === 0) return null;
+function archetypeScores(p) {
   const s = p.s;
-  const scores = {
+  return {
     teamfight: s.cc * 0.5 + p.engageMax * 1.6 + s.front * 0.45,
     poke: s.poke * 1.3,
     protect: (p.carry && p.peelers.length ? 3.5 : 0) + s.peel * 0.9,
@@ -564,64 +567,250 @@ function archetype(p) {
     early: Math.max(0, s.early - s.late) * 2.2,
     scale: Math.max(0, s.late - s.early) * 2.2,
   };
-  return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+}
+function archetype(p) {
+  if (p.n === 0) return null;
+  return Object.entries(archetypeScores(p)).sort((a, b) => b[1] - a[1])[0][0];
+}
+const ARCH_LABEL = {
+  teamfight: "teamfight/engage", poke: "poke-siege", protect: "protect-the-carry",
+  split: "split-push", early: "early-game tempo", scale: "scaling",
+};
+// rock-paper-scissors edges: key beats listed archetypes
+const ARCH_BEATS = {
+  teamfight: ["poke", "scale"], split: ["teamfight"],
+  early: ["scale", "protect"], poke: ["protect"], scale: ["poke"],
+};
+function archetypeEdge(a, b) {
+  if ((ARCH_BEATS[a] || []).includes(b)) return 1;
+  if ((ARCH_BEATS[b] || []).includes(a)) return -1;
+  return 0;
 }
 
-const joinNames = arr => arr.slice(0, 3).join(", ");
+const joinNames = arr => (arr && arr.length ? arr.slice(0, 3).join(", ") : "");
 
-function winConditionText(p) {
-  switch (archetype(p)) {
-    case "teamfight": return `Group and force 5v5 teamfights around objectives — ${joinNames(p.engagers) || "the frontline"} ${p.engagers.length > 1 ? "start" : "starts"} the fight${p.carry ? `, ${p.carry} cleans up` : ""}.`;
-    case "poke": return `Siege and whittle the enemy down with ${joinNames(p.pokers)} before objectives spawn — take free damage and never let them start the fight.`;
-    case "protect": return `Get ${p.carry} to 3+ items and win extended fights — ${joinNames(p.peelers) || "the supports"} peel everything off ${p.carry}.`;
-    case "split": return `Win through side-lane pressure: ${joinNames(p.splitters)} splits while the rest play 4v4 — trade towers, don't group 5 mid.`;
-    case "early": return `Snowball before ~20 min: ${joinNames(p.earlies)} hit their power spike first — force skirmishes, dives and early objectives, and close fast.`;
-    case "scale": return `Out-scale: play clean early, farm safely, and take over after 25+ min when ${joinNames(p.lates)} come online.`;
-    default: return "Balanced comp — win through whichever lanes get ahead.";
+/* ---- lane-by-lane matchup analysis ---- */
+function laneAnalysis(myPicks, enemyPicks) {
+  let net = 0; const edges = [];
+  myPicks.forEach(p => {
+    const opp = enemyPicks.find(e => e.role === p.role);
+    if (!opp) return;
+    const c = CHAMPIONS[p.key], oc = CHAMPIONS[opp.key];
+    const good = listHas(c.beats, opp.key) || listHas(oc.counteredBy, p.key);
+    const bad = listHas(c.counteredBy, opp.key) || listHas(oc.beats, p.key);
+    if (good && !bad) { net++; edges.push({ role: p.role, winner: "me", short: `${dispName(p.key)} > ${dispName(opp.key)}`, text: `${dispName(p.key)} beats ${dispName(opp.key)} ${ROLE_LABEL[p.role]}` }); }
+    else if (bad && !good) { net--; edges.push({ role: p.role, winner: "en", short: `${dispName(opp.key)} > ${dispName(p.key)}`, text: `${dispName(opp.key)} beats ${dispName(p.key)} ${ROLE_LABEL[p.role]}` }); }
+  });
+  return { net, edges, strongest: edges.find(e => e.winner === "me") || null, weakest: edges.find(e => e.winner === "en") || null };
+}
+
+/* ---- comp cohesion: how complete/balanced a team is ---- */
+function cohesionScore(p) {
+  if (!p.n) return 0;
+  let s = 0;
+  const tot = p.s.ad + p.s.ap || 1, adFrac = p.s.ad / tot;
+  s -= Math.max(0, Math.abs(adFrac - 0.5) - 0.18) * 5;       // one-dimensional damage
+  if (p.s.front >= 3) s += 0.8; else if (p.s.front < 2) s -= 1.6;
+  if (p.engageMax >= 2) s += 0.6; else s -= 1.2;
+  if (p.s.cc >= 5) s += 0.5; else if (p.s.cc < 4) s -= 0.8;
+  if (p.carry && !p.peelers.length) s -= 0.6;
+  return s;
+}
+function cohesionGap(p) {
+  if (p.s.front < 2) return "no reliable frontline";
+  const tot = p.s.ad + p.s.ap || 1, f = p.s.ad / tot;
+  if (Math.abs(f - 0.5) > 0.32) return f > 0.5 ? "all-AD damage (easily itemized)" : "all-AP damage (easily itemized)";
+  if (p.engageMax < 2) return "no hard engage";
+  if (p.s.cc < 4) return "very little CC";
+  if (p.carry && !p.peelers.length) return "no peel for its carry";
+  return "a thinner overall comp";
+}
+function synergyCount(picks) {
+  let c = 0;
+  for (let i = 0; i < picks.length; i++) for (let j = i + 1; j < picks.length; j++) {
+    const a = CHAMPIONS[picks[i].key], b = CHAMPIONS[picks[j].key];
+    if (listHas(a.syn, picks[j].key) || listHas(b.syn, picks[i].key)) c++;
   }
+  return c;
 }
 
-function gamePlanBullets(my, en) {
+/* ---- draft evaluation → win probability + reasons ---- */
+function metaStrength(picks) {
+  return picks.reduce((sum, p) => {
+    const c = CHAMPIONS[p.key], rd = c.roles[p.role];
+    return sum + (rd ? (rd.wr - 50) * 0.4 + (TIER_BONUS[rd.tier] || 0) : -0.8) + proScore(c) * 0.22;
+  }, 0);
+}
+function draftEvaluation(myPicks, enemyPicks) {
+  const my = teamProfile(myPicks), en = teamProfile(enemyPicks);
+  if (my.n < 2 || en.n < 2) return null;
+  const factors = []; let net = 0;
+
+  const la = laneAnalysis(myPicks, enemyPicks);
+  if (la.net !== 0) {
+    const d = la.net * 0.8; net += d;
+    const side = d > 0 ? "me" : "en";
+    factors.push({ delta: d, text: `${d > 0 ? "Lane matchups favor you" : "Lane matchups favor them"}: ${la.edges.filter(e => e.winner === side).map(e => e.short).slice(0, 3).join(", ")}` });
+  }
+
+  const md = metaStrength(myPicks) - metaStrength(enemyPicks);
+  if (Math.abs(md) > 0.6) {
+    const d = md * 0.35; net += d;
+    factors.push({ delta: d, text: d > 0 ? "Your champions are individually stronger on patch 26.12" : "Their champions are individually stronger on patch 26.12" });
+  }
+
+  const cw = Math.min(my.n, en.n) / 5;                       // cohesion matters more as comps fill out
+  const cd = (cohesionScore(my) - cohesionScore(en)) * 1.15 * cw;
+  if (Math.abs(cd) > 0.3) {
+    net += cd;
+    factors.push({ delta: cd, text: cd > 0 ? `Your comp is more cohesive — theirs has ${cohesionGap(en)}` : `Their comp is more cohesive — yours has ${cohesionGap(my)}` });
+  }
+
+  const sd = (synergyCount(myPicks) - synergyCount(enemyPicks)) * 0.5;
+  if (Math.abs(sd) > 0.4) { net += sd; factors.push({ delta: sd, text: sd > 0 ? "More pick synergies on your side" : "They have more pick synergies" }); }
+
+  const ae = archetypeEdge(archetype(my), archetype(en));
+  if (ae) {
+    const d = ae * 1.1; net += d;
+    factors.push({ delta: d, text: d > 0
+      ? `Your ${ARCH_LABEL[archetype(my)]} style is favored into their ${ARCH_LABEL[archetype(en)]} comp`
+      : `Their ${ARCH_LABEL[archetype(en)]} style is favored into your ${ARCH_LABEL[archetype(my)]} comp` });
+  }
+
+  let prob = 1 / (1 + Math.exp(-net * 0.13));
+  prob = Math.max(0.22, Math.min(0.78, prob));
+  factors.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  return { myProb: prob, my, en, lane: la, factors, full: my.n >= 5 && en.n >= 5 };
+}
+
+/* ---- detailed win condition (style + phase plan) ---- */
+function winCondition(p) {
+  const eng = joinNames(p.engagers) || "your frontline";
+  const carry = p.carry || joinNames(p.carries) || "your carry";
+  const A = {
+    teamfight: { style: "Teamfight / Engage",
+      summary: `Win the game in 5v5s around objectives — ${eng} picks when to commit and the team collapses behind it, with ${carry} doing the damage once the fight is locked.`,
+      early: `You don't need lane leads, you need everyone healthy at the first drake/grub timers. Stack waves and arrive with summoner spells up.`,
+      mid: `Group as 5 by mid game. Start fights at Dragon/Baron with ${eng}, and bait the enemy into chokes where your AoE and CC overlap.`,
+      fights: `Land engage on their highest-value target${p.divers.length ? ` (flank with ${joinNames(p.divers)})` : ""}; hold CC until their key escape/peel is used, then chain it.` },
+    poke: { style: "Poke / Siege",
+      summary: `Win without ever taking a fair fight — ${joinNames(p.pokers)} chunk them below turret, then you take the objective for free.`,
+      early: `Shove and poke for a health lead; avoid all-ins, your power is range and zone control, not extended trades.`,
+      mid: `Play every objective on a timer: poke them off it, then take it uncontested. Always keep a wall or minions between you and their engage.`,
+      fights: `Never start the fight. Whittle them on the approach, and if they hard-engage, disengage and reset — repeat until they're too low to contest.` },
+    protect: { style: "Protect-the-Carry",
+      summary: `Funnel the game into ${carry} and win extended fights — ${joinNames(p.peelers) || "your supports"} keep ${carry} alive and free to deal damage.`,
+      early: `Get ${carry} farmed and safe; trade other lanes and jungle pathing for ${carry}'s comfort and tempo.`,
+      mid: `Group for objectives but fight on your terms: stand on top of ${carry}, body-block divers, and don't get split off.`,
+      fights: `${carry} holds max range and never walks up first. Peelers answer the first engage; the whole fight is about ${carry} surviving the opening 5 seconds.` },
+    split: { style: "Split-Push / 1-3-1",
+      summary: `Stretch the map — ${joinNames(p.splitters)} pressure a side lane while the other four hold and threaten objectives cross-map.`,
+      early: `Win or stabilize the side lane that splits and bank a Teleport/wave advantage; don't force the 5v5s you're not built for.`,
+      mid: `Run 1-3-1 once outer towers fall: ${joinNames(p.splitters)} pushes a side, the rest match or take objectives elsewhere. Trade towers, don't group 5 mid.`,
+      fights: `Avoid 5v5. Win the 1v1/1v2 on the splitter and the 4v4 elsewhere; only group when they fully collapse to stop the split.` },
+    early: { style: "Early-Game / Tempo",
+      summary: `Snowball before ~20 min — ${joinNames(p.earlies)} spike first, so turn early kills into objectives into towers fast.`,
+      early: `Be the aggressor everywhere: invade, dive, and prioritize early skirmishes and the first drakes/grubs while you're strongest.`,
+      mid: `Convert leads immediately — take towers and Baron-side objectives off the back of kills. Do not let the game slow down.`,
+      fights: `Force fights while you hold the level/item edge and collapse on isolated targets; the longer it goes, the worse your odds.` },
+    scale: { style: "Scaling / Late-Game",
+      summary: `Out-scale them — survive early, farm cleanly, and take over after 25+ min once ${joinNames(p.lates)} are online.`,
+      early: `Play safe and even: concede small pressure, don't die for nothing, value farm and scaling over early fights.`,
+      mid: `Trade objectives for time. Give up what you can't safely contest and ward deep to avoid picks while your carries catch up.`,
+      fights: `Delay fights until your item spikes, then group for Baron/Elder with full builds — one clean late teamfight closes it.` },
+  };
+  return A[archetype(p)] || { style: "Flexible",
+    summary: "No single identity yet — win through whichever lanes get ahead and shape the mid-game around your leads.",
+    early: "Play to your strongest matchups.", mid: "Take objectives where you have priority.", fights: "Fight when you have numbers or a pick." };
+}
+
+function gamePlanBullets(myPicks, enemyPicks, my, en) {
   const b = [];
+  const la = laneAnalysis(myPicks, enemyPicks);
   const myLean = my.s.late - my.s.early, enLean = en.s.late - en.s.early;
+
   if (myLean - enLean >= 2) b.push("You out-scale them. Respect their early aggression, don't take coin-flip fights before 20 min, and trade objectives for safe farm — time is on your side.");
-  else if (enLean - myLean >= 2) b.push("Your advantage has a timer — they out-scale you. Force early skirmishes and dives, take objectives on spawn, and aim to end before ~30 min.");
+  else if (enLean - myLean >= 2) b.push("Your advantage has a timer — they out-scale you. Force early skirmishes and dives, take objectives on spawn, and aim to close before ~30 min.");
   else b.push("Tempo is even — this game is decided by lane matchups and objective setups, not by stalling or rushing.");
 
+  if (la.strongest) b.push(`Snowball your best lane: ${la.strongest.text}. Path your jungle there early, set up dives, and turn that lead into objectives.`);
+  if (la.weakest) b.push(`Protect your weakest lane: ${la.weakest.text}. Help early, freeze/give up CS rather than die, and don't force that matchup 1v1.`);
+
   if (en.s.poke >= 5 && my.engageMax >= 2) b.push(`They want to poke you out before fights start. Don't dance at max range — force the engage with ${joinNames(my.engagers)}, or fight from fog and chokes where poke can't stack.`);
-  if (my.s.poke >= 5 && en.engageMax >= 3) b.push(`Poke before objectives, but track engage cooldowns on ${joinNames(en.engagers)} — keep spacing and disengage their flanks.`);
+  if (my.s.poke >= 5 && en.engageMax >= 3) b.push(`Poke before objectives but track engage cooldowns on ${joinNames(en.engagers)} — keep spacing and disengage their flank.`);
 
-  if (en.splitters.length) b.push(`${joinNames(en.splitters)} will splitpush. Don't send three people — answer with one matching side-laner, or trade objectives 4v4 on the other side of the map.`);
-  if (my.splitters.length && my.s.split >= 5) b.push(`Use ${joinNames(my.splitters)}'s side pressure: set up 1-3-1 once laning ends, and only group when they fully collapse to stop it.`);
+  if (en.splitters.length) b.push(`${joinNames(en.splitters)} will splitpush. Don't send three to stop it — match with one side-laner, or trade objectives 4v4 on the opposite side.`);
+  if (my.splitters.length && my.s.split >= 5) b.push(`Use ${joinNames(my.splitters)}'s side pressure: set up 1-3-1 once laning ends, and only group when they fully collapse.`);
 
-  if (en.n >= 4 && en.s.ap < 0.6) b.push("Their damage is almost all AD — stack armor on your frontline (Randuin's, Frozen Heart); their threat falls off hard against it.");
-  if (en.n >= 4 && en.s.ad < 0.6) b.push("Their damage is almost all AP — rush MR on your frontline (Spirit Visage, Force of Nature, Mercs) and they run out of ways to kill you.");
-  if (my.n >= 4 && my.s.ap < 0.6) b.push("Your damage is all AD — they will stack armor. Close the game before their defensive items come online.");
-  if (my.n >= 4 && my.s.ad < 0.6) b.push("Your damage is all AP — expect MR stacking; prioritize Void Staff timing or end early.");
+  if (en.n >= 4 && en.s.ap < 0.6) b.push("Their damage is almost all AD — armor on your frontline (Randuin's, Frozen Heart, Plated/Tabis) blunts their whole comp.");
+  if (en.n >= 4 && en.s.ad < 0.6) b.push("Their damage is almost all AP — rush MR on the frontline (Spirit Visage, Force of Nature, Mercs) and they run out of ways to kill you.");
+  if (my.n >= 4 && my.s.ap < 0.6) b.push("Your damage is all AD — they'll stack armor; pick up armor pen / Black Cleaver and close before their defensive items come online.");
+  if (my.n >= 4 && my.s.ad < 0.6) b.push("Your damage is all AP — expect MR stacking; time Void Staff / Shadowflame purchases and don't let it drag.");
 
-  if (en.catchers.length) b.push(`Don't get caught: ${joinNames(en.catchers)} can turn one pick into a lost game. Buy control wards, move in pairs after 20 min, never facecheck.`);
-  if (en.carry && my.engageMax >= 2) b.push(`Their plan runs through ${en.carry} — assign your engage/dive onto them first in every fight.`);
+  if (en.catchers.length) b.push(`Don't get caught: ${joinNames(en.catchers)} turns one pick into a lost game. Control wards, move in pairs after 20 min, never facecheck a brush.`);
+  if (en.carry && my.engageMax >= 2) b.push(`Their game runs through ${en.carry} — assign your engage/dive to it first and burst it before it does damage.`);
+  if (my.carry && en.engageMax >= 2) b.push(`${my.carry} is your win condition — buy Stopwatch/Zhonya's or QSS into their engage and position last in every fight.`);
 
-  return b.slice(0, 6);
+  return b.slice(0, 8);
+}
+
+function outlookHTML(myPicks, enemyPicks, myLabel, enLabel, myColor, enColor) {
+  const ev = draftEvaluation(myPicks, enemyPicks);
+  if (!ev) return "";
+  const myPct = Math.round(ev.myProb * 100), enPct = 100 - myPct;
+  const favMe = myPct >= enPct;
+  const favLabel = favMe ? myLabel : enLabel;
+  const tilt = Math.abs(myPct - 50);
+  const verdict = tilt < 4 ? "Even draft" : tilt < 10 ? `Slight edge: ${favLabel}` : tilt < 18 ? `Favored: ${favLabel}` : `Strongly favored: ${favLabel}`;
+  const facts = ev.factors.slice(0, 5).map(f => {
+    const mine = f.delta > 0;
+    return `<li class="${mine ? "ol-plus" : "ol-minus"}">${mine ? "▲" : "▼"} ${f.text}</li>`;
+  }).join("");
+  return `
+    <div class="outlook">
+      <div class="ol-head"><span>Draft outlook</span><span class="ol-verdict">${verdict}${ev.full ? "" : " · provisional"}</span></div>
+      <div class="ol-bar">
+        <div class="ol-me" style="width:${myPct}%;background:${myColor}">${myLabel} ${myPct}%</div>
+        <div class="ol-en" style="width:${enPct}%;background:${enColor}">${enPct}% ${enLabel}</div>
+      </div>
+      <ul class="ol-why">${facts || '<li class="ol-even">Comps are close on every axis so far.</li>'}</ul>
+    </div>`;
+}
+
+function winConColsHTML(my, en, enColor) {
+  const wc = winCondition(my), ec = winCondition(en);
+  const block = (w, color, label) => `
+    <div class="gp-win" style="border-left:3px solid ${color}">
+      <div class="gp-lbl">${label}</div>
+      <div class="wc-style">${w.style}</div>
+      <div class="wc-summary">${w.summary}</div>
+      <div class="wc-phases">
+        <div><span class="wc-ph">Early</span> ${w.early}</div>
+        <div><span class="wc-ph">Mid &amp; objectives</span> ${w.mid}</div>
+        <div><span class="wc-ph">Teamfights</span> ${w.fights}</div>
+      </div>
+    </div>`;
+  return `<div class="gp-cols">${block(wc, "var(--gold)", "Your win condition")}${block(ec, enColor, "Enemy win condition")}</div>`;
 }
 
 function renderGamePlan() {
   const el = $("gameplan");
   const enemySide = state.mySide === "blue" ? "red" : "blue";
-  const my = teamProfile(teamPicks(state.mySide)), en = teamProfile(teamPicks(enemySide));
+  const myPicks = teamPicks(state.mySide), enPicks = teamPicks(enemySide);
+  const my = teamProfile(myPicks), en = teamProfile(enPicks);
   if (my.n < 2 || en.n < 2) {
-    el.innerHTML = `<div class="gp-empty">Win conditions and the matchup game plan appear once both teams have at least 2 picks.</div>`;
+    el.innerHTML = `<div class="gp-empty">Draft outlook, win conditions and the matchup plan appear once both teams have at least 2 picks.</div>`;
     return;
   }
-  const partial = (my.n < 5 || en.n < 5) ? `<div class="gp-note">Draft in progress — the plan sharpens as more picks lock in.</div>` : "";
+  const partial = (my.n < 5 || en.n < 5) ? `<div class="gp-note">Draft in progress — the outlook and plan sharpen as more picks lock in.</div>` : "";
+  const myColor = state.mySide === "blue" ? "var(--blue-team)" : "var(--red-team)";
   const enColor = enemySide === "blue" ? "var(--blue-team)" : "var(--red-team)";
-  el.innerHTML = partial + `
-    <div class="gp-cols">
-      <div class="gp-win" style="border-left:3px solid var(--gold)"><div class="gp-lbl">Your win condition</div>${winConditionText(my)}</div>
-      <div class="gp-win" style="border-left:3px solid ${enColor}"><div class="gp-lbl">Enemy win condition</div>${winConditionText(en)}</div>
-    </div>
-    <div class="gp-lbl">How to play it</div>
-    <ul class="gp-list">${gamePlanBullets(my, en).map(t => `<li>${t}</li>`).join("")}</ul>`;
+  const myLabel = state.mySide === "blue" ? "BLUE" : "RED", enLabel = enemySide === "blue" ? "BLUE" : "RED";
+  el.innerHTML = partial
+    + outlookHTML(myPicks, enPicks, myLabel, enLabel, myColor, enColor)
+    + winConColsHTML(my, en, enColor)
+    + `<div class="gp-lbl">How to play it</div>
+       <ul class="gp-list">${gamePlanBullets(myPicks, enPicks, my, en).map(t => `<li>${t}</li>`).join("")}</ul>`;
 }
 
 /* ================= Actions ================= */
@@ -716,8 +905,9 @@ function flexScore(key, role, myPicks, comfort) {
   const c = CHAMPIONS[key];
   const reasons = [];
   let score = 0;
-  // Comfort is the dominant term in flex — play what your players know.
-  score += comfort === 3 ? 4 : comfort === 2 ? 2.4 : 0.8;
+  // Comfort matters in flex — but comp cohesion (below) is weighted up enough that
+  // a learnable/similar pick can win out when the team really needs what it brings.
+  score += comfort === 3 ? 3.6 : comfort === 2 ? 2.3 : 1.0;
   // meta strength in role
   const rd = c.roles[role];
   if (rd) {
@@ -747,14 +937,22 @@ function flexScore(key, role, myPicks, comfort) {
     if (listHas(c.syn, a.key) || listHas(ac.syn, key)) { score += 1.1; reasons.push(["+", `synergy ${dispName(a.key)}`]); }
   });
 
-  // comp needs
+  // comp needs — weighted up per request: lean toward a cohesive comp vs the enemy
   const comp = compStats(myPicks);
   if (comp.n >= 1) {
-    if (comp.ap === 0 && c.dmg === "ap") { score += 1.4; reasons.push(["+", "adds AP"]); }
-    if (comp.ad === 0 && c.dmg === "ad") { score += 1.4; reasons.push(["+", "adds AD"]); }
-    if (comp.front < 3 && c.a.front >= 2) { score += 1.1; reasons.push(["+", "frontline"]); }
-    if (comp.engage < 2 && c.a.engage >= 2) { score += 1.0; reasons.push(["+", "engage"]); }
-    if (comp.cc < 4 && c.a.cc >= 2) { score += 0.5; reasons.push(["+", "CC"]); }
+    if (comp.ap === 0 && c.dmg === "ap") { score += 2.1; reasons.push(["+", "adds AP"]); }
+    if (comp.ad === 0 && c.dmg === "ad") { score += 2.1; reasons.push(["+", "adds AD"]); }
+    if (comp.front < 3 && c.a.front >= 2) { score += 1.7; reasons.push(["+", "frontline"]); }
+    if (comp.engage < 2 && c.a.engage >= 2) { score += 1.6; reasons.push(["+", "engage"]); }
+    if (comp.cc < 4 && c.a.cc >= 2) { score += 0.9; reasons.push(["+", "CC"]); }
+    if (comp.late >= 4 && comp.peel < 3 && c.a.peel >= 2) { score += 1.0; reasons.push(["+", "peel"]); }
+  }
+  // counter the enemy comp shape
+  const ec = compStats(flex.enemy);
+  if (ec.n >= 3) {
+    if (ec.ap < 0.6 && c.a.front >= 2) { score += 0.9; reasons.push(["+", "tanky vs their AD"]); }
+    if (ec.poke >= 5 && c.a.engage >= 2) { score += 1.0; reasons.push(["+", "engage vs poke"]); }
+    if (ec.engage >= 3 && c.a.peel >= 2) { score += 0.8; reasons.push(["+", "disengage vs dive"]); }
   }
   return { score, reasons };
 }
@@ -844,20 +1042,19 @@ function renderFlexEnemy() {
 
 function renderFlexGamePlan() {
   const el = $("flex-gameplan");
-  const my = teamProfile(flexMyPicks());
-  const en = teamProfile(flex.enemy.map(e => ({ key: e.key, role: e.role })));
+  const myPicks = flexMyPicks();
+  const enPicks = flex.enemy.map(e => ({ key: e.key, role: e.role }));
+  const my = teamProfile(myPicks), en = teamProfile(enPicks);
   if (my.n < 2 || en.n < 2) {
-    el.innerHTML = `<div class="gp-empty">Win conditions and the matchup game plan appear once your team and the enemy each have at least 2 champions.</div>`;
+    el.innerHTML = `<div class="gp-empty">Draft outlook, win conditions and the matchup plan appear once your team and the enemy each have at least 2 champions.</div>`;
     return;
   }
-  const partial = (my.n < 5 || en.n < 5) ? `<div class="gp-note">Draft in progress — the plan sharpens as more picks lock in.</div>` : "";
-  el.innerHTML = partial + `
-    <div class="gp-cols">
-      <div class="gp-win" style="border-left:3px solid var(--gold)"><div class="gp-lbl">Your win condition</div>${winConditionText(my)}</div>
-      <div class="gp-win" style="border-left:3px solid var(--red-team)"><div class="gp-lbl">Enemy win condition</div>${winConditionText(en)}</div>
-    </div>
-    <div class="gp-lbl">How to play it</div>
-    <ul class="gp-list">${gamePlanBullets(my, en).map(t => `<li>${t}</li>`).join("")}</ul>`;
+  const partial = (my.n < 5 || en.n < 5) ? `<div class="gp-note">Draft in progress — the outlook and plan sharpen as more picks lock in.</div>` : "";
+  el.innerHTML = partial
+    + outlookHTML(myPicks, enPicks, "YOUR TEAM", "ENEMY", "var(--gold)", "var(--red-team)")
+    + winConColsHTML(my, en, "var(--red-team)")
+    + `<div class="gp-lbl">How to play it</div>
+       <ul class="gp-list">${gamePlanBullets(myPicks, enPicks, my, en).map(t => `<li>${t}</li>`).join("")}</ul>`;
 }
 
 function renderFlexGrid() {

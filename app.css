@@ -235,6 +235,24 @@ body.mode-flex #flex-view { display: flex; }
 .gp-list { margin: 6px 0 0 18px; font-size: 12px; line-height: 1.6; }
 .gp-list li { margin-bottom: 7px; }
 
+/* draft outlook / win % */
+.outlook { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; padding: 10px; margin-bottom: 12px; }
+.ol-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); }
+.ol-verdict { color: var(--gold-bright); font-weight: 700; }
+.ol-bar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; font-size: 12px; font-weight: 700; }
+.ol-bar .ol-me { display: flex; align-items: center; padding-left: 8px; color: #fff; white-space: nowrap; }
+.ol-bar .ol-en { display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: #fff; white-space: nowrap; }
+.ol-why { margin: 8px 0 0 2px; list-style: none; font-size: 11.5px; line-height: 1.5; }
+.ol-why li { margin-bottom: 3px; }
+.ol-plus { color: var(--good); } .ol-minus { color: var(--bad); } .ol-even { color: var(--text-dim); }
+
+/* detailed win condition */
+.wc-style { font-size: 12px; font-weight: 700; color: var(--gold-bright); margin-bottom: 4px; }
+.wc-summary { font-size: 12px; line-height: 1.55; margin-bottom: 7px; }
+.wc-phases { font-size: 11.5px; line-height: 1.5; color: var(--text); }
+.wc-phases > div { margin-bottom: 4px; }
+.wc-ph { display: inline-block; min-width: 96px; color: var(--gold); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+
 /* ---------- Flex view ---------- */
 #flex-view { display: none; flex-direction: column; gap: 14px; padding: 14px 18px; max-width: 860px; margin: 0 auto; }
 #flex-view section { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }

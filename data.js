@@ -235,6 +235,7 @@ const PLAYERS = [
       {key:"Khazix", comfort:1, like:"Graves/Kindred carry"}, {key:"Nidalee", comfort:1, like:"Elise"},
       {key:"LeeSin", comfort:1, like:"skirmish tempo"}, {key:"Viego", comfort:1, like:"skirmisher"},
       {key:"Kayn", comfort:1, like:"Hecarim"},
+      {key:"JarvanIV", comfort:1, like:"learnable teamfight engage"}, {key:"Vi", comfort:1, like:"learnable lock-on engage"},
     ] },
   { name:"TheDrunkOfRivia", ign:"TheDrunkOfRivia#NA1", rank:"Emerald 2", role:"top",
     pool:[
@@ -247,6 +248,7 @@ const PLAYERS = [
       {key:"Ahri", comfort:3}, {key:"Lux", comfort:3}, {key:"Gragas", comfort:2}, {key:"Gangplank", comfort:3, alt:"top"},
       {key:"Syndra", comfort:1, like:"control mage"}, {key:"Orianna", comfort:1, like:"control mage"},
       {key:"TwistedFate", comfort:1, like:"roaming mage"}, {key:"Viktor", comfort:1, like:"control mage"}, {key:"Vladimir", comfort:1, like:"Gragas-style"},
+      {key:"Galio", comfort:1, like:"learnable engage mage"}, {key:"Lissandra", comfort:1, like:"learnable engage mage"},
     ] },
   { name:"MonkeyDAdam", ign:"MonkeyDAdam#NA1", rank:"Platinum 3", role:"adc",
     pool:[
