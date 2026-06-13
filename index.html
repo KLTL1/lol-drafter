@@ -15,31 +15,37 @@
       <div class="patch" id="patch-label">Patch —</div>
     </div>
   </div>
-  <div class="side-select">
+  <div class="side-select draft-only">
     <span class="side-label">My team:</span>
     <button id="side-blue" class="side-btn blue active">BLUE</button>
     <button id="side-red" class="side-btn red">RED</button>
   </div>
-  <div class="opt-group" title="2026 First Selection: pick order can be decoupled from side">
+  <div class="opt-group draft-only" title="2026 First Selection: pick order can be decoupled from side">
     <span class="side-label">First pick:</span>
     <button id="fp-blue" class="opt-btn active">BLUE</button>
     <button id="fp-red" class="opt-btn">RED</button>
   </div>
   <div class="topbar-actions">
-    <button id="fearless-btn" class="ghost-btn warn" title="Mark champions used earlier in the series (fearless draft)">☠ Fearless</button>
-    <button id="undo-btn" class="ghost-btn" title="Undo last action">↩ Undo</button>
-    <button id="reset-btn" class="ghost-btn" title="Reset draft">⟲ Reset</button>
+    <button id="fearless-btn" class="ghost-btn warn draft-only" title="Mark champions used earlier in the series (fearless draft)">☠ Fearless</button>
+    <button id="undo-btn" class="ghost-btn draft-only" title="Undo last action">↩ Undo</button>
+    <button id="reset-btn" class="ghost-btn draft-only" title="Reset draft">⟲ Reset</button>
+    <button id="flex-reset-btn" class="ghost-btn flex-only" title="Clear flex board">⟲ Reset</button>
   </div>
 </header>
 
-<div id="fearless-bar">
+<nav id="tabbar">
+  <button id="tab-draft" class="tab active">⚔ Tournament Draft</button>
+  <button id="tab-flex" class="tab">🎲 Flex Queue (your team)</button>
+</nav>
+
+<div id="fearless-bar" class="draft-only">
   <span class="hint">Fearless mode: click champions in the grid to mark them as used in previous games of the series (unavailable to both teams). Click a chip to remove.</span>
   <span id="fearless-chips"></span>
 </div>
 
-<div id="draft-track"></div>
+<div id="draft-track" class="draft-only"></div>
 
-<main id="layout">
+<main id="layout" class="draft-only">
   <!-- Blue team column -->
   <section class="team-col blue" id="blue-col">
     <h2 class="team-title blue">BLUE SIDE <span class="you-tag" id="blue-you">YOU</span></h2>
@@ -93,6 +99,51 @@
   <section id="gameplan-panel">
     <h3>Game Plan</h3>
     <div id="gameplan"></div>
+  </section>
+</main>
+
+<!-- ============ FLEX QUEUE VIEW ============ -->
+<main id="flex-view" class="flex-only">
+  <section id="flex-instructions">
+    Recommendations are limited to <strong>your 5 players' champion pools</strong> (from their OP.GG profiles).
+    Lock your picks straight from each player's card. Add enemy champions by clicking the grid below — fast, no bans, no draft order.
+  </section>
+
+  <section id="flex-mine-panel">
+    <h3>Your Team — best picks from each player's pool</h3>
+    <div id="flex-mine"></div>
+  </section>
+
+  <section id="flex-enemy-panel">
+    <h3>Enemy Team <span id="flex-enemy-count" class="count">0 / 5</span></h3>
+    <div id="flex-enemy"></div>
+  </section>
+
+  <section id="flex-gameplan-panel">
+    <h3>Game Plan</h3>
+    <div id="flex-gameplan"></div>
+  </section>
+
+  <section id="flex-pool-panel">
+    <div class="pool-controls">
+      <div class="flex-addside">
+        <span class="side-label">Click grid adds to:</span>
+        <button id="flex-add-enemy" class="opt-btn active">Enemy</button>
+        <button id="flex-add-mine" class="opt-btn">Your team</button>
+      </div>
+    </div>
+    <div class="pool-controls">
+      <input type="search" id="flex-search" placeholder="Search champion…" autocomplete="off">
+      <div class="role-filters" id="flex-role-filters">
+        <button data-role="all" class="active">All</button>
+        <button data-role="top">Top</button>
+        <button data-role="jungle">Jng</button>
+        <button data-role="mid">Mid</button>
+        <button data-role="adc">ADC</button>
+        <button data-role="support">Sup</button>
+      </div>
+    </div>
+    <div id="flex-grid"></div>
   </section>
 </main>
 

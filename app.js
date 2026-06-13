@@ -532,8 +532,7 @@ function renderFearless() {
 }
 
 /* ================= Game plan ================= */
-function teamProfile(side) {
-  const picks = teamPicks(side);
+function teamProfile(picks) {
   const champs = picks.map(p => ({ key: p.key, role: p.role, c: CHAMPIONS[p.key] }));
   const s = compStats(picks);
   const names = f => champs.filter(f).map(x => dispName(x.key));
@@ -609,7 +608,7 @@ function gamePlanBullets(my, en) {
 function renderGamePlan() {
   const el = $("gameplan");
   const enemySide = state.mySide === "blue" ? "red" : "blue";
-  const my = teamProfile(state.mySide), en = teamProfile(enemySide);
+  const my = teamProfile(teamPicks(state.mySide)), en = teamProfile(teamPicks(enemySide));
   if (my.n < 2 || en.n < 2) {
     el.innerHTML = `<div class="gp-empty">Win conditions and the matchup game plan appear once both teams have at least 2 picks.</div>`;
     return;
@@ -678,4 +677,263 @@ document.querySelectorAll("#role-filters button").forEach(b => {
   };
 });
 
+/* ============================================================
+   FLEX QUEUE MODE — recommendations limited to the 5 players'
+   champion pools. No bans, no draft order; just input champions.
+   ============================================================ */
+const flex = {
+  mine: { top:null, jungle:null, mid:null, adc:null, support:null }, // role -> champ key
+  enemy: [],          // [{key, role}]
+  addSide: "enemy",
+  search: "",
+  gridRole: "all",
+};
+
+function flexUsed() {
+  const s = new Set(flex.enemy.map(e => e.key));
+  Object.values(flex.mine).forEach(k => { if (k) s.add(k); });
+  return s;
+}
+function flexMyPicks() {
+  return ROLES.filter(r => flex.mine[r]).map(r => ({ key: flex.mine[r], role: r }));
+}
+
+function flexInferEnemyRole(key) {
+  const taken = new Set(flex.enemy.map(e => e.role));
+  let open = ROLES.filter(r => !taken.has(r));
+  if (!open.length) open = ROLES;
+  const c = CHAMPIONS[key];
+  let best = open[0], bestS = -Infinity;
+  open.forEach(r => {
+    const rd = c.roles[r];
+    const s = rd ? rd.pr + (rd.wr - 48) : (c.flex || []).includes(r) ? 0.5 : -5;
+    if (s > bestS) { bestS = s; best = r; }
+  });
+  return best;
+}
+
+function flexScore(key, role, myPicks, comfort) {
+  const c = CHAMPIONS[key];
+  const reasons = [];
+  let score = 0;
+  // Comfort is the dominant term in flex — play what your players know.
+  score += comfort === 3 ? 4 : comfort === 2 ? 2.4 : 0.8;
+  // meta strength in role
+  const rd = c.roles[role];
+  if (rd) {
+    score += (rd.wr - 50) * 0.45 + (TIER_BONUS[rd.tier] || 0);
+    if (rd.wr >= 51.5) reasons.push(["+", `${rd.wr}% WR`]);
+    if (rd.wr < 48.5) reasons.push(["-", `${rd.wr}% WR`]);
+  }
+  score += proScore(c) * 0.3;
+  if (META.patchBuffs.includes(key)) { score += 0.5; reasons.push(["+", "buffed 26.12"]); }
+  if (META.patchNerfs.includes(key)) { score -= 0.5; reasons.push(["-", "nerfed 26.12"]); }
+
+  // matchups vs enemy
+  flex.enemy.forEach(e => {
+    const ec = CHAMPIONS[e.key];
+    const same = e.role === role;
+    const w = same ? 2.2 : 0.5;
+    const bad = listHas(c.counteredBy, e.key) || listHas(ec.beats, key);
+    const good = listHas(c.beats, e.key) || listHas(ec.counteredBy, key);
+    if (good && !bad) { score += w; reasons.push(["+", `strong vs ${dispName(e.key)}`]); }
+    if (bad && !good) { score -= w; reasons.push(["-", `weak vs ${dispName(e.key)}`]); }
+  });
+
+  // synergy with already-locked teammates
+  myPicks.forEach(a => {
+    if (a.key === key) return;
+    const ac = CHAMPIONS[a.key];
+    if (listHas(c.syn, a.key) || listHas(ac.syn, key)) { score += 1.1; reasons.push(["+", `synergy ${dispName(a.key)}`]); }
+  });
+
+  // comp needs
+  const comp = compStats(myPicks);
+  if (comp.n >= 1) {
+    if (comp.ap === 0 && c.dmg === "ap") { score += 1.4; reasons.push(["+", "adds AP"]); }
+    if (comp.ad === 0 && c.dmg === "ad") { score += 1.4; reasons.push(["+", "adds AD"]); }
+    if (comp.front < 3 && c.a.front >= 2) { score += 1.1; reasons.push(["+", "frontline"]); }
+    if (comp.engage < 2 && c.a.engage >= 2) { score += 1.0; reasons.push(["+", "engage"]); }
+    if (comp.cc < 4 && c.a.cc >= 2) { score += 0.5; reasons.push(["+", "CC"]); }
+  }
+  return { score, reasons };
+}
+
+function flexRecsFor(playerIdx) {
+  const player = PLAYERS[playerIdx];
+  const role = player.role;
+  const used = flexUsed();
+  const myPicks = flexMyPicks().filter(p => p.role !== role); // exclude their own slot
+  const comfortLabel = { 3: "main / high mastery", 2: "in champ pool", 1: "comfort pick" };
+  const seen = {};
+  player.pool.forEach(entry => {
+    const r = entry.alt || role;
+    if (r !== role) return;                 // only this player's assigned role
+    if (used.has(entry.key)) return;
+    if (!CHAMPIONS[entry.key]) return;
+    const res = flexScore(entry.key, role, myPicks, entry.comfort);
+    const base = [["c" + entry.comfort, entry.like ? `like ${entry.like}` : comfortLabel[entry.comfort]]];
+    const item = { key: entry.key, comfort: entry.comfort, score: res.score, reasons: base.concat(res.reasons) };
+    if (!seen[entry.key] || item.score > seen[entry.key].score) seen[entry.key] = item;
+  });
+  return Object.values(seen).sort((a, b) => b.score - a.score);
+}
+
+function renderFlexMine() {
+  const el = $("flex-mine");
+  el.innerHTML = "";
+  PLAYERS.forEach((player, idx) => {
+    const role = player.role;
+    const locked = flex.mine[role];
+    const card = document.createElement("div");
+    card.className = "fp-card";
+    let body;
+    if (locked) {
+      const entry = player.pool.find(e => e.key === locked);
+      const sub = entry ? (entry.like ? `comfort pick — like ${entry.like}` : (entry.comfort === 3 ? "mastery main" : "in champ pool")) : "off-pool pick";
+      body = `<div class="fp-locked">${champImgHTML(locked)}
+        <div><div class="lk-name">${dispName(locked)}</div><div class="lk-sub">${sub}</div></div>
+        <button class="fp-clear" data-role="${role}">✕ change</button></div>`;
+    } else {
+      const recs = flexRecsFor(idx).slice(0, 3);
+      body = `<div class="fp-recs">` + (recs.length ? recs.map(r => {
+        const reason = (r.reasons.find(x => x[0] === "+") || r.reasons[0] || ["", ""])[1];
+        return `<div class="fp-rec" data-role="${role}" data-key="${r.key}">
+          ${champImgHTML(r.key)}
+          <div class="r-main"><div class="r-name"><span class="comfort-dot comfort-${r.comfort}"></span>${dispName(r.key)}</div>
+          <div class="r-reason">${reason}</div></div>
+          <div class="r-score">${r.score.toFixed(1)}</div></div>`;
+      }).join("") : `<div class="gp-empty">No available pool champ for this role.</div>`) + `</div>`;
+    }
+    card.innerHTML = `
+      <div class="fp-head">
+        <span class="fp-role">${ROLE_ICON[role]}</span>
+        <span class="fp-name">${player.name}</span>
+        <span class="fp-rank">${player.rank}</span>
+        <span class="fp-roletag">${ROLE_LABEL[role]}</span>
+      </div>
+      <div class="fp-body">${body}</div>`;
+    el.appendChild(card);
+  });
+  el.querySelectorAll(".fp-rec").forEach(r => {
+    r.onclick = () => { flex.mine[r.dataset.role] = r.dataset.key; renderFlex(); };
+  });
+  el.querySelectorAll(".fp-clear").forEach(b => {
+    b.onclick = () => { flex.mine[b.dataset.role] = null; renderFlex(); };
+  });
+}
+
+function renderFlexEnemy() {
+  const el = $("flex-enemy");
+  el.innerHTML = "";
+  $("flex-enemy-count").textContent = `${flex.enemy.length} / 5`;
+  for (let i = 0; i < 5; i++) {
+    const e = flex.enemy[i];
+    const slot = document.createElement("div");
+    slot.className = "fe-slot" + (e ? " filled" : "");
+    if (e) {
+      slot.innerHTML = `${champImgHTML(e.key)}<div class="fe-name">${dispName(e.key)}</div><div class="fe-role">${ROLE_LABEL[e.role]}</div>`;
+      slot.title = "Click to remove";
+      slot.onclick = () => { flex.enemy.splice(i, 1); renderFlex(); };
+    } else {
+      slot.innerHTML = `<div class="fe-empty">empty</div>`;
+    }
+    el.appendChild(slot);
+  }
+}
+
+function renderFlexGamePlan() {
+  const el = $("flex-gameplan");
+  const my = teamProfile(flexMyPicks());
+  const en = teamProfile(flex.enemy.map(e => ({ key: e.key, role: e.role })));
+  if (my.n < 2 || en.n < 2) {
+    el.innerHTML = `<div class="gp-empty">Win conditions and the matchup game plan appear once your team and the enemy each have at least 2 champions.</div>`;
+    return;
+  }
+  const partial = (my.n < 5 || en.n < 5) ? `<div class="gp-note">Draft in progress — the plan sharpens as more picks lock in.</div>` : "";
+  el.innerHTML = partial + `
+    <div class="gp-cols">
+      <div class="gp-win" style="border-left:3px solid var(--gold)"><div class="gp-lbl">Your win condition</div>${winConditionText(my)}</div>
+      <div class="gp-win" style="border-left:3px solid var(--red-team)"><div class="gp-lbl">Enemy win condition</div>${winConditionText(en)}</div>
+    </div>
+    <div class="gp-lbl">How to play it</div>
+    <ul class="gp-list">${gamePlanBullets(my, en).map(t => `<li>${t}</li>`).join("")}</ul>`;
+}
+
+function renderFlexGrid() {
+  const grid = $("flex-grid");
+  grid.innerHTML = "";
+  const used = flexUsed();
+  const q = norm(flex.search);
+  // champions in any player's pool, for a subtle highlight
+  const inPool = new Set();
+  PLAYERS.forEach(p => p.pool.forEach(e => inPool.add(e.key)));
+  Object.keys(CHAMPIONS).sort((a, b) => dispName(a).localeCompare(dispName(b))).forEach(k => {
+    const c = CHAMPIONS[k];
+    if (q && !norm(dispName(k)).includes(q) && !norm(k).includes(q)) return;
+    if (flex.gridRole !== "all" && !c.roles[flex.gridRole] && !(c.flex || []).includes(flex.gridRole)) return;
+    const cell = document.createElement("div");
+    cell.className = "champ-cell" + (used.has(k) ? " used" : "");
+    cell.innerHTML = champImgHTML(k) + `<span>${dispName(k)}</span>`;
+    cell.onclick = () => {
+      if (used.has(k)) return;
+      if (flex.addSide === "enemy") {
+        if (flex.enemy.length >= 5) return;
+        flex.enemy.push({ key: k, role: flexInferEnemyRole(k) });
+      } else {
+        // add to your team: place in the role of a player who has it, else its best role
+        let placed = false;
+        for (const r of ROLES) {
+          const pl = PLAYERS[PLAYER_BY_ROLE[r]];
+          if (!flex.mine[r] && pl.pool.some(e => e.key === k && (e.alt || r) === r)) { flex.mine[r] = k; placed = true; break; }
+        }
+        if (!placed) {
+          const r = flexInferEnemyRole(k); // reuse best-open-role logic against your team
+          const openMine = ROLES.filter(rr => !flex.mine[rr]);
+          const target = openMine.includes(r) ? r : openMine[0];
+          if (target) flex.mine[target] = k;
+        }
+      }
+      renderFlex();
+    };
+    grid.appendChild(cell);
+  });
+}
+
+function renderFlex() {
+  renderFlexMine();
+  renderFlexEnemy();
+  renderFlexGamePlan();
+  renderFlexGrid();
+}
+
+function setMode(mode) {
+  document.body.classList.toggle("mode-flex", mode === "flex");
+  document.body.classList.toggle("mode-draft", mode === "draft");
+  $("tab-draft").classList.toggle("active", mode === "draft");
+  $("tab-flex").classList.toggle("active", mode === "flex");
+  if (mode === "flex") renderFlex(); else render();
+}
+
+/* flex wiring */
+$("tab-draft").onclick = () => setMode("draft");
+$("tab-flex").onclick = () => setMode("flex");
+$("flex-reset-btn").onclick = () => {
+  flex.mine = { top:null, jungle:null, mid:null, adc:null, support:null };
+  flex.enemy = [];
+  renderFlex();
+};
+$("flex-add-enemy").onclick = () => { flex.addSide = "enemy"; $("flex-add-enemy").classList.add("active"); $("flex-add-mine").classList.remove("active"); };
+$("flex-add-mine").onclick = () => { flex.addSide = "mine"; $("flex-add-mine").classList.add("active"); $("flex-add-enemy").classList.remove("active"); };
+$("flex-search").oninput = e => { flex.search = e.target.value; renderFlexGrid(); };
+document.querySelectorAll("#flex-role-filters button").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll("#flex-role-filters button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    flex.gridRole = b.dataset.role;
+    renderFlexGrid();
+  };
+});
+
+setMode("draft");
 render();

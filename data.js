@@ -221,3 +221,44 @@ const META = {
   // High pro-priority first pick/ban targets (presence ≥ ~40%)
   firstPickBan: ["Orianna","Varus","Rumble","JarvanIV","Karma","Ryze","Nautilus","Ambessa","Pantheon","Nocturne"],
 };
+
+/* ================= Flex Queue team =================
+   Built from the 5 OP.GG profiles (mastery + most-played, June 2026).
+   pool entries: comfort 3 = mastery main / one-trick-level,
+   2 = played in pool, 1 = similar-playstyle suggestion (not on their account
+   but fits how they play). `like` notes which of their champs it resembles.
+   One player per role (a clean 5-stack), but each pool gives in-role options. */
+const PLAYERS = [
+  { name:"Teemoboy", ign:"Teemoboy2011#Smile", rank:"Diamond 2", role:"jungle",
+    pool:[
+      {key:"Graves", comfort:3}, {key:"Elise", comfort:3}, {key:"Kindred", comfort:3}, {key:"Hecarim", comfort:3},
+      {key:"Khazix", comfort:1, like:"Graves/Kindred carry"}, {key:"Nidalee", comfort:1, like:"Elise"},
+      {key:"LeeSin", comfort:1, like:"skirmish tempo"}, {key:"Viego", comfort:1, like:"skirmisher"},
+      {key:"Kayn", comfort:1, like:"Hecarim"},
+    ] },
+  { name:"TheDrunkOfRivia", ign:"TheDrunkOfRivia#NA1", rank:"Emerald 2", role:"top",
+    pool:[
+      {key:"Shen", comfort:3}, {key:"Zac", comfort:2}, {key:"Sejuani", comfort:2, alt:"jungle"}, {key:"Nautilus", comfort:2, alt:"support"},
+      {key:"Ornn", comfort:1, like:"tank top"}, {key:"Sion", comfort:1, like:"tank top"}, {key:"Malphite", comfort:1, like:"tank top"},
+      {key:"KSante", comfort:1, like:"tank top"}, {key:"Maokai", comfort:1, like:"tank"}, {key:"Chogath", comfort:1, like:"tank top"},
+    ] },
+  { name:"StyIebender", ign:"StyIebender#NA1", rank:"Platinum 3", role:"mid",
+    pool:[
+      {key:"Ahri", comfort:3}, {key:"Lux", comfort:3}, {key:"Gragas", comfort:2}, {key:"Gangplank", comfort:3, alt:"top"},
+      {key:"Syndra", comfort:1, like:"control mage"}, {key:"Orianna", comfort:1, like:"control mage"},
+      {key:"TwistedFate", comfort:1, like:"roaming mage"}, {key:"Viktor", comfort:1, like:"control mage"}, {key:"Vladimir", comfort:1, like:"Gragas-style"},
+    ] },
+  { name:"MonkeyDAdam", ign:"MonkeyDAdam#NA1", rank:"Platinum 3", role:"adc",
+    pool:[
+      {key:"MissFortune", comfort:3}, {key:"Lucian", comfort:3}, {key:"Jinx", comfort:3}, {key:"Syndra", comfort:2, alt:"mid"}, {key:"Ekko", comfort:2, alt:"mid"},
+      {key:"Caitlyn", comfort:1, like:"lane bully"}, {key:"Samira", comfort:1, like:"aggressive carry"},
+      {key:"Jhin", comfort:1, like:"MF-style"}, {key:"Ashe", comfort:1, like:"utility ADC"}, {key:"Tristana", comfort:1, like:"Lucian tempo"},
+    ] },
+  { name:"YoitsSam", ign:"YoitsSam#NA1", rank:"Platinum 4", role:"support",
+    pool:[
+      {key:"Thresh", comfort:3}, {key:"Nautilus", comfort:3}, {key:"Leona", comfort:3}, {key:"Rakan", comfort:2},
+      {key:"Alistar", comfort:1, like:"engage"}, {key:"Rell", comfort:1, like:"engage"},
+      {key:"Blitzcrank", comfort:1, like:"playmaker"}, {key:"Pyke", comfort:1, like:"roam/engage"},
+    ] },
+];
+const PLAYER_BY_ROLE = { jungle:0, top:1, mid:2, adc:3, support:4 };
